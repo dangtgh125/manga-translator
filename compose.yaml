@@ -1,0 +1,128 @@
+# Manga Translator — local-first stack. Only `web` is published, on 127.0.0.1.
+# Works with `docker compose` and `podman compose` (see Makefile).
+
+x-backend-common: &backend-common
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+    target: runtime
+    args:
+      OCR_EXTRAS: ${OCR_EXTRAS:-full}
+      COMPAT_SME_VM: ${COMPAT_SME_VM:-0}
+  image: manga-translator/backend:local
+  user: "10001:10001"
+  read_only: true
+  tmpfs:
+    - /tmp:size=1g,mode=1777
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    MT_DATA_DIR: /data
+    MT_MODELS_DIR: /models
+    MT_MASTER_KEY_FILE: /run/secrets/master_key
+    MT_WORKER_HEARTBEAT_FILE: /state/worker.heartbeat
+    MT_OCR_ENGINE: ${MT_OCR_ENGINE:-paddle}
+    MT_OCR_INFERENCE_ENGINE: ${MT_OCR_INFERENCE_ENGINE:-onnxruntime}
+    PADDLE_PDX_MODEL_SOURCE: ${PADDLE_PDX_MODEL_SOURCE:-bos}
+  volumes:
+    - data:/data
+    - models:/models
+    - state:/state
+  secrets:
+    - master_key
+  networks:
+    - internal
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *backend-common
+    # Upload spool budget: the multipart parser spools file parts to /tmp, and tmpfs pages are charged to this
+    # container's memory cgroup. MT_MAX_UPLOAD_TOTAL_BYTES (256 MiB) <= tmpfs (512m) < memory (768M), so a
+    # runaway request hits ENOSPC (handled) before it can OOM-kill the api. Scale all three together.
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck", "api"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+          pids: 256
+
+  worker:
+    <<: *backend-common
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Liveness: heartbeat file touched by the worker loop within the last 90s.
+      test: ["CMD", "python", "-m", "app.healthcheck", "worker"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: ${WORKER_MEMORY_LIMIT:-2560M}
+          pids: 512
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: web
+    image: manga-translator/web:local
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+          pids: 64
+    networks:
+      - internal
+    restart: unless-stopped
+
+volumes:
+  data:
+  models:
+  state:
+
+secrets:
+  master_key:
+    file: ./secrets/master.key
+
+networks:
+  internal:
+    driver: bridge

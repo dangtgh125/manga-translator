@@ -1,0 +1,16 @@
+.git
+.gitignore
+secrets
+data
+models
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+benchmarks/data
+.env
+*.key
+*.pem
+service-account*.json

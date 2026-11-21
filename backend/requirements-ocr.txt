@@ -1,0 +1,9 @@
+# OCR / ML runtime (pinned). Installed only when OCR_EXTRAS=full.
+# PaddleOCR 3.x with the onnxruntime inference engine (works on linux/amd64 and linux/arm64).
+paddleocr==3.7.0
+paddlex[ocr-core]==3.7.0
+onnxruntime==1.31.1
+# manga-ocr supplementary recognizer for Japanese crops (PyTorch CPU).
+manga-ocr==0.1.16
+torch==2.15.0
+transformers==5.22.0

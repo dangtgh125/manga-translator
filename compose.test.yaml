@@ -1,0 +1,95 @@
+# Test overlay: separate images (no OCR stack), mock OCR + mock providers, in-network e2e runner.
+# Used only together with compose.yaml under project name `manga-translator-test`, so volumes are separate.
+#
+# Secrets isolation: the test project never sees the real configuration or key.
+# - `env_file` (.env) and the `master_key` secret are removed from api/worker with `!reset`; the master key is the
+#   inline throwaway value below (MT_MASTER_KEY), so `make test` works without secrets/master.key.
+# - The Makefile additionally runs the test project with `--env-file /dev/null`, so Compose does not load .env
+#   for `${VAR}` interpolation either (every interpolated variable has a default in compose.yaml).
+
+# Drop the shared extension block (it carries env_file/secrets) from the merged output; anchors are already resolved.
+x-backend-common: !reset null
+
+x-test-env: &test-env
+  MT_TEST_MODE: "1"
+  MT_OCR_ENGINE: mock
+  MT_MOCK_PROVIDERS: "1"
+  MT_MASTER_KEY_FILE: ""
+  MT_MASTER_KEY: test-master-key-0123456789abcdef0123456789abcdef0123456789
+  MT_ENDPOINT_ALLOWLIST: ""
+
+services:
+  api:
+    image: manga-translator-test/backend:local
+    build:
+      args:
+        OCR_EXTRAS: none
+        COMPAT_SME_VM: ${COMPAT_SME_VM:-0}
+    env_file: !reset []
+    secrets: !reset []
+    environment:
+      <<: *test-env
+    restart: "no"
+
+  worker:
+    image: manga-translator-test/backend:local
+    build:
+      args:
+        OCR_EXTRAS: none
+        COMPAT_SME_VM: ${COMPAT_SME_VM:-0}
+    env_file: !reset []
+    secrets: !reset []
+    environment:
+      <<: *test-env
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    image: manga-translator-test/web:local
+    restart: "no"
+    # Never publish a host port from the test project (the app may be running on 8080).
+    ports: !reset []
+
+  tests:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: test
+      args:
+        OCR_EXTRAS: none
+        COMPAT_SME_VM: ${COMPAT_SME_VM:-0}
+    image: manga-translator-test/tests:local
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          pids: 256
+    environment:
+      <<: *test-env
+      MT_DATA_DIR: /tmp/mt-test-data
+      MT_MODELS_DIR: /tmp/mt-test-models
+      MT_WORKER_HEARTBEAT_FILE: /tmp/mt-test-heartbeat
+      MT_E2E_BASE_URL: http://api:8000
+      MT_WEB_BASE_URL: http://web:8080
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - internal
+
+# No file-backed secret in the test project (the real ./secrets/master.key must never be mounted here).
+secrets: !reset {}

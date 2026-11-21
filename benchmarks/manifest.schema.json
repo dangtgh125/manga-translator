@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manga Translator benchmark manifest",
+  "type": "object",
+  "required": ["pages"],
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["image", "group", "regions"],
+        "properties": {
+          "image": {"type": "string"},
+          "group": {"type": "string"},
+          "reading_direction": {"type": "string", "enum": ["rtl", "ltr"], "default": "rtl"},
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["polygon", "text"],
+              "properties": {
+                "polygon": {"type": "array", "minItems": 3, "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}},
+                "text": {"type": "string"},
+                "lang": {"type": "string", "enum": ["ja", "zh-Hans", "zh-Hant", "unknown"]},
+                "order": {"type": "integer"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

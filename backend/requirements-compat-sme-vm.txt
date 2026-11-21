@@ -1,0 +1,25 @@
+# Compatibility overrides for VMs that advertise SME without SVE (Apple M4 + Apple Virtualization /
+# Podman "applehv" machines): newer cryptography (>=47) and onnxruntime (>=1.31) wheels dispatch to
+# SME/SVE kernels and crash with SIGILL. Installed only when the build arg COMPAT_SME_VM=1 is set
+# EXPLICITLY (`COMPAT_SME_VM=1 make up` or COMPAT_SME_VM=1 in .env); the Makefile never selects it on
+# its own. Local development only: never deploy or publish an image built from this branch.
+#
+# Advisory status (pip-audit, reviewed 2026-11-04; CI re-audits this branch on every run and fails on any
+# advisory not listed here):
+#   cryptography==46.0.7
+#     GHSA-537c-gmf6-5ccf  HIGH      bundled OpenSSL < 3.6.3 (secadv 2026-06-09, incl. CVE-2026-45447 UAF in
+#                                    PKCS7_verify, TLS/CMS/QUIC issues)                     fixed in 48.0.1
+#     GHSA-jwv3-5hgf-82ww  HIGH      CVE-2026-69249 exponential X.509 path building (DoS)   fixed in 49.0.0
+#     GHSA-g6cj-pr64-35w5  HIGH      CVE-2026-69247 PKCS#7 EnvelopedData Bleichenbacher oracle fixed in 50.0.0
+#     GHSA-m2h6-j472-rp4c  MODERATE  CVE-2026-69248 name-constraint wildcard escape (verifier) fixed in 49.0.0
+#     Accepted because: every fixed release (48.0.1+) ships the OpenSSL SME probe that SIGILLs on these VMs,
+#     and the app uses cryptography only for Fernet (backend/app/security/secrets.py); it never runs the
+#     X.509 verifier, PKCS#7/CMS, or TLS through cryptography's bundled OpenSSL (TLS goes through Python's
+#     `ssl` module / system OpenSSL). Residual risk is limited to a local dev machine.
+#   onnxruntime==1.30.0   no known advisories (1.31.1 is the latest release; it adds nothing security-related
+#                                    and no release fixes SME-without-SVE detection).
+#
+# Ways to avoid this branch entirely (details in docs/OPERATIONS.md, "VM Apple Silicon"): disable SME in the
+# guest kernel (`arm64.nosme`), use real hardware / a non-SME VM, or Docker Desktop >= 4.39.
+cryptography==46.0.7
+onnxruntime==1.30.0

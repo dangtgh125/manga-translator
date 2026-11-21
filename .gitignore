@@ -1,0 +1,28 @@
+# secrets / local data
+secrets/*
+!secrets/.gitkeep
+.env
+*.key
+*.pem
+service-account*.json
+data/
+models/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# node
+node_modules/
+frontend/dist/
+
+# benchmarks datasets (licensed material stays out of git)
+benchmarks/data/
+benchmarks/reports/*.json
+
+# sample images for translation testing (copyrighted material stays out of git)
+example/
